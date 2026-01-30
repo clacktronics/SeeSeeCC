@@ -78,6 +78,80 @@
             font-weight: 600;
         }
 
+        .files-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .files-header h5 {
+            margin-bottom: 0;
+        }
+
+        .files-header .button {
+            height: 28px;
+            line-height: 28px;
+            padding: 0 12px;
+            font-size: 11px;
+            margin: 0;
+        }
+
+        .files-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            background: var(--bg-light);
+            border-radius: 4px;
+            font-size: 13px;
+        }
+
+        .file-color {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+
+        .file-name {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .file-info {
+            color: var(--text-light);
+            font-size: 11px;
+            flex-shrink: 0;
+        }
+
+        .file-remove {
+            background: none;
+            border: none;
+            color: var(--text-light);
+            cursor: pointer;
+            padding: 2px 6px;
+            font-size: 14px;
+            line-height: 1;
+            border-radius: 2px;
+        }
+
+        .file-remove:hover {
+            background: #E74C3C;
+            color: white;
+        }
+
         .stats-row {
             display: flex;
             gap: 30px;
@@ -521,23 +595,23 @@
         <h1>SeeSeeCC</h1>
 
         <div class="upload-area" id="uploadArea">
-            <input type="file" id="fileInput" accept=".mid,.midi">
-            <p>Drop a MIDI file here or click to browse</p>
+            <input type="file" id="fileInput" accept=".mid,.midi" multiple>
+            <p>Drop MIDI files here or click to browse (multiple files supported)</p>
         </div>
 
         <div class="card hidden" id="fileInfo">
-            <h5 id="fileName">File Name</h5>
+            <div class="files-header">
+                <h5>Loaded Files</h5>
+                <button class="button" id="clearAllBtn">Clear All</button>
+            </div>
+            <div class="files-list" id="filesList"></div>
             <div class="stats-row">
                 <div class="stat">
-                    <div class="stat-label">Format</div>
-                    <div class="stat-value" id="formatType">-</div>
+                    <div class="stat-label">Total Files</div>
+                    <div class="stat-value" id="fileCount">-</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-label">Tracks</div>
-                    <div class="stat-value" id="trackCount">-</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-label">CC Messages</div>
+                    <div class="stat-label">Total CC Messages</div>
                     <div class="stat-value" id="ccCount">-</div>
                 </div>
                 <div class="stat">
@@ -548,6 +622,12 @@
         </div>
 
         <div class="filters-row hidden" id="filters">
+            <div class="filter-group">
+                <label for="fileFilter">File</label>
+                <select id="fileFilter">
+                    <option value="all">All Files</option>
+                </select>
+            </div>
             <div class="filter-group">
                 <label for="channelFilter">Channel</label>
                 <select id="channelFilter">
@@ -688,16 +768,20 @@
             127: 'Poly Mode'
         };
 
-        // Color palette for different CC lanes
-        const LANE_COLORS = [
+        // Color palette for files (distinct colors for each file)
+        const FILE_COLORS = [
             '#33C3F0', '#E74C3C', '#2ECC71', '#F39C12', '#9B59B6',
-            '#1ABC9C', '#E67E22', '#3498DB', '#E91E63', '#00BCD4'
+            '#1ABC9C', '#E67E22', '#3498DB', '#E91E63', '#00BCD4',
+            '#8E44AD', '#16A085', '#D35400', '#2980B9', '#C0392B'
         ];
 
         // Maximum canvas width (browsers typically limit to ~32767px)
         const MAX_CANVAS_WIDTH = 16000;
 
-        let allCCMessages = [];
+        // Multi-file storage
+        let loadedFiles = []; // Array of { id, name, color, messages, duration, format, tracks }
+        let nextFileId = 0;
+        let allCCMessages = []; // Combined messages from all files
         let totalDuration = 0;
         let pixelsPerSecond = 100;
 
@@ -715,8 +799,11 @@
         const fileInfo = document.getElementById('fileInfo');
         const filters = document.getElementById('filters');
         const emptyState = document.getElementById('emptyState');
+        const fileFilter = document.getElementById('fileFilter');
         const channelFilter = document.getElementById('channelFilter');
         const ccFilter = document.getElementById('ccFilter');
+        const filesList = document.getElementById('filesList');
+        const clearAllBtn = document.getElementById('clearAllBtn');
         const zoomSlider = document.getElementById('zoomSlider');
         const fitToViewBtn = document.getElementById('fitToViewBtn');
         const graphWrapper = document.getElementById('graphWrapper');
@@ -758,18 +845,20 @@
         uploadArea.addEventListener('drop', (e) => {
             e.preventDefault();
             uploadArea.classList.remove('dragover');
-            const file = e.dataTransfer.files[0];
-            if (file && (file.name.endsWith('.mid') || file.name.endsWith('.midi'))) {
-                loadMidiFile(file);
-            }
+            const files = Array.from(e.dataTransfer.files).filter(f =>
+                f.name.endsWith('.mid') || f.name.endsWith('.midi')
+            );
+            files.forEach(file => loadMidiFile(file));
         });
         fileInput.addEventListener('change', (e) => {
-            if (e.target.files[0]) {
-                loadMidiFile(e.target.files[0]);
-            }
+            const files = Array.from(e.target.files);
+            files.forEach(file => loadMidiFile(file));
+            fileInput.value = ''; // Reset to allow re-selecting same files
         });
+        fileFilter.addEventListener('change', applyFilters);
         channelFilter.addEventListener('change', applyFilters);
         ccFilter.addEventListener('change', applyFilters);
+        clearAllBtn.addEventListener('click', clearAllFiles);
         zoomSlider.addEventListener('input', () => {
             pixelsPerSecond = 50 * parseFloat(zoomSlider.value);
             applyFilters();
@@ -943,10 +1032,15 @@
             const activeChannels = new Set();
 
             // Get filtered messages based on current filter settings
+            const fileValue = fileFilter.value;
             const channelValue = channelFilter.value;
             const ccValue = ccFilter.value;
 
             let relevantMessages = allCCMessages.filter(m => m.time <= time);
+
+            if (fileValue !== 'all') {
+                relevantMessages = relevantMessages.filter(m => m.fileId === parseInt(fileValue));
+            }
 
             if (channelValue !== 'all') {
                 relevantMessages = relevantMessages.filter(m => m.channel === parseInt(channelValue));
@@ -1018,7 +1112,7 @@
 
             const headerChunk = readString(data, pos, 4);
             if (headerChunk !== 'MThd') {
-                alert('Invalid MIDI file');
+                alert('Invalid MIDI file: ' + fileName);
                 return;
             }
             pos += 4;
@@ -1037,7 +1131,7 @@
 
             const ticksPerBeat = timeDivision & 0x7FFF;
 
-            allCCMessages = [];
+            const fileMessages = [];
             let tempo = 500000;
             let maxTick = 0;
 
@@ -1097,7 +1191,7 @@
 
                         const timeInSeconds = tickToSeconds(tick, ticksPerBeat, tempo);
 
-                        allCCMessages.push({
+                        fileMessages.push({
                             tick,
                             time: timeInSeconds,
                             channel,
@@ -1113,25 +1207,116 @@
                 }
             }
 
-            allCCMessages.sort((a, b) => a.tick - b.tick);
+            const fileDuration = tickToSeconds(maxTick, ticksPerBeat, tempo);
 
-            totalDuration = tickToSeconds(maxTick, ticksPerBeat, tempo);
+            // Create file entry
+            const fileId = nextFileId++;
+            const fileColor = FILE_COLORS[loadedFiles.length % FILE_COLORS.length];
 
-            document.getElementById('fileName').textContent = fileName;
-            document.getElementById('formatType').textContent = `Type ${format}`;
-            document.getElementById('trackCount').textContent = numTracks;
-            document.getElementById('ccCount').textContent = allCCMessages.length;
-            document.getElementById('duration').textContent = formatTime(totalDuration);
+            // Add fileId and color to each message
+            fileMessages.forEach(msg => {
+                msg.fileId = fileId;
+                msg.color = fileColor;
+            });
+
+            loadedFiles.push({
+                id: fileId,
+                name: fileName,
+                color: fileColor,
+                messages: fileMessages,
+                duration: fileDuration,
+                format: format,
+                tracks: numTracks
+            });
+
+            // Rebuild combined messages and recalculate duration
+            rebuildCombinedData();
+
+            // Update UI
+            updateFilesListUI();
+            updateStatsUI();
+            populateFilters();
 
             fileInfo.classList.remove('hidden');
-
-            populateFilters();
             filters.classList.remove('hidden');
-
-            // Show CC bars and playhead
             ccBarsContainer.classList.add('visible');
             document.getElementById('playhead').classList.add('visible');
 
+            applyFilters();
+        }
+
+        function rebuildCombinedData() {
+            allCCMessages = [];
+            totalDuration = 0;
+
+            loadedFiles.forEach(file => {
+                allCCMessages = allCCMessages.concat(file.messages);
+                if (file.duration > totalDuration) {
+                    totalDuration = file.duration;
+                }
+            });
+
+            allCCMessages.sort((a, b) => a.time - b.time);
+        }
+
+        function updateFilesListUI() {
+            filesList.innerHTML = '';
+
+            loadedFiles.forEach(file => {
+                const item = document.createElement('div');
+                item.className = 'file-item';
+                item.innerHTML = `
+                    <div class="file-color" style="background: ${file.color}"></div>
+                    <span class="file-name" title="${file.name}">${file.name}</span>
+                    <span class="file-info">${file.messages.length} CC</span>
+                    <button class="file-remove" data-file-id="${file.id}" title="Remove file">&times;</button>
+                `;
+                filesList.appendChild(item);
+            });
+
+            // Add event listeners for remove buttons
+            filesList.querySelectorAll('.file-remove').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const fileId = parseInt(e.target.dataset.fileId);
+                    removeFile(fileId);
+                });
+            });
+        }
+
+        function updateStatsUI() {
+            document.getElementById('fileCount').textContent = loadedFiles.length;
+            document.getElementById('ccCount').textContent = allCCMessages.length;
+            document.getElementById('duration').textContent = formatTime(totalDuration);
+        }
+
+        function removeFile(fileId) {
+            stopPlayback();
+            loadedFiles = loadedFiles.filter(f => f.id !== fileId);
+
+            if (loadedFiles.length === 0) {
+                clearAllFiles();
+            } else {
+                rebuildCombinedData();
+                updateFilesListUI();
+                updateStatsUI();
+                populateFilters();
+                applyFilters();
+            }
+        }
+
+        function clearAllFiles() {
+            stopPlayback();
+            loadedFiles = [];
+            allCCMessages = [];
+            totalDuration = 0;
+            nextFileId = 0;
+
+            fileInfo.classList.add('hidden');
+            filters.classList.add('hidden');
+            ccBarsContainer.classList.remove('visible');
+            document.getElementById('playhead').classList.remove('visible');
+
+            updateFilesListUI();
             applyFilters();
         }
 
@@ -1179,6 +1364,12 @@
         }
 
         function populateFilters() {
+            // File filter
+            fileFilter.innerHTML = '<option value="all">All Files</option>';
+            loadedFiles.forEach(file => {
+                fileFilter.innerHTML += `<option value="${file.id}" style="color: ${file.color}">${file.name}</option>`;
+            });
+
             const channels = [...new Set(allCCMessages.map(m => m.channel))].sort((a, b) => a - b);
             const ccNumbers = [...new Set(allCCMessages.map(m => m.cc))].sort((a, b) => a - b);
 
@@ -1195,10 +1386,15 @@
         }
 
         function applyFilters() {
+            const fileValue = fileFilter.value;
             const channelValue = channelFilter.value;
             const ccValue = ccFilter.value;
 
             let filtered = allCCMessages;
+
+            if (fileValue !== 'all') {
+                filtered = filtered.filter(m => m.fileId === parseInt(fileValue));
+            }
 
             if (channelValue !== 'all') {
                 filtered = filtered.filter(m => m.channel === parseInt(channelValue));
@@ -1222,12 +1418,16 @@
 
             emptyState.style.display = 'none';
 
-            // Group messages by CC number and channel
+            // Group messages by file + channel + CC (each file gets its own lanes)
             const lanes = {};
             messages.forEach(msg => {
-                const key = `${msg.channel}-${msg.cc}`;
+                const key = `${msg.fileId}-${msg.channel}-${msg.cc}`;
                 if (!lanes[key]) {
+                    const file = loadedFiles.find(f => f.id === msg.fileId);
                     lanes[key] = {
+                        fileId: msg.fileId,
+                        fileName: file ? file.name : 'Unknown',
+                        color: msg.color,
                         channel: msg.channel,
                         cc: msg.cc,
                         messages: []
@@ -1237,6 +1437,8 @@
             });
 
             const laneList = Object.values(lanes).sort((a, b) => {
+                // Sort by file, then channel, then CC
+                if (a.fileId !== b.fileId) return a.fileId - b.fileId;
                 if (a.channel !== b.channel) return a.channel - b.channel;
                 return a.cc - b.cc;
             });
@@ -1258,13 +1460,16 @@
             labelHeader.style.background = 'var(--bg-light)';
             laneLabels.appendChild(labelHeader);
 
-            laneList.forEach((lane, index) => {
+            laneList.forEach((lane) => {
                 const label = document.createElement('div');
                 label.className = 'lane-label';
+                // Show file color indicator in the label
+                const shortFileName = lane.fileName.length > 15 ? lane.fileName.substring(0, 12) + '...' : lane.fileName;
                 label.innerHTML = `
-                    <div class="lane-label-cc" style="color: ${LANE_COLORS[index % LANE_COLORS.length]}">CC ${lane.cc}</div>
+                    <div class="lane-label-cc" style="color: ${lane.color}">CC ${lane.cc}</div>
                     <div class="lane-label-name">${CC_NAMES[lane.cc] || 'Unknown'}</div>
                     <div class="lane-label-channel">Ch ${lane.channel}</div>
+                    <div class="lane-label-file" style="color: ${lane.color}; font-size: 9px; margin-top: 2px;" title="${lane.fileName}">${shortFileName}</div>
                 `;
                 laneLabels.appendChild(label);
             });
@@ -1292,8 +1497,8 @@
                 valueAxis.innerHTML = '<span>127</span><span>64</span><span>0</span>';
                 laneEl.appendChild(valueAxis);
 
-                // Draw the CC data with scale factor
-                drawLaneData(canvas, lane.messages, LANE_COLORS[index % LANE_COLORS.length], scale);
+                // Draw the CC data with scale factor - use file color
+                drawLaneData(canvas, lane.messages, lane.color, scale);
 
                 // Tooltip handling
                 laneEl.addEventListener('mousemove', (e) => {
