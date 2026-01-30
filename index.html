@@ -328,8 +328,12 @@
             background: #E74C3C;
             pointer-events: none;
             z-index: 10;
-            display: block;
+            display: none;
             left: 0;
+        }
+
+        .playhead.visible {
+            display: block;
         }
 
         .playhead::before {
@@ -1044,8 +1048,9 @@
             populateFilters();
             filters.classList.remove('hidden');
 
-            // Show CC bars
+            // Show CC bars and playhead
             ccBarsContainer.classList.add('visible');
+            document.getElementById('playhead').classList.add('visible');
 
             applyFilters();
         }
