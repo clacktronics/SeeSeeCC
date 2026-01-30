@@ -328,7 +328,8 @@
             background: #E74C3C;
             pointer-events: none;
             z-index: 10;
-            display: none;
+            display: block;
+            left: 0;
         }
 
         .playhead::before {
@@ -341,6 +342,127 @@
             border-left: 5px solid transparent;
             border-right: 5px solid transparent;
             border-top: 6px solid #E74C3C;
+        }
+
+        /* Transport controls */
+        .transport-bar {
+            background: var(--bg-light);
+            border-bottom: 1px solid var(--border);
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .transport-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .transport-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 4px;
+            border: 1px solid var(--border);
+            background: var(--bg-white);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .transport-btn:hover {
+            border-color: var(--primary);
+            background: rgba(51, 195, 240, 0.1);
+        }
+
+        .transport-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .transport-btn.active svg {
+            stroke: white;
+            fill: white;
+        }
+
+        .transport-btn svg {
+            width: 16px;
+            height: 16px;
+            stroke: var(--text);
+            fill: none;
+        }
+
+        .timecode {
+            font-family: 'Courier New', monospace;
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text);
+            background: var(--bg-white);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 6px 12px;
+            min-width: 110px;
+            text-align: center;
+        }
+
+        /* CC Bars display */
+        .cc-bars-container {
+            background: #1a1a2e;
+            border-bottom: 1px solid var(--border);
+            padding: 10px 20px;
+            display: none;
+        }
+
+        .cc-bars-container.visible {
+            display: block;
+        }
+
+        .cc-bars-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .cc-bars-header span {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: #666;
+        }
+
+        .cc-bars-wrapper {
+            display: flex;
+            gap: 1px;
+            height: 60px;
+            align-items: flex-end;
+        }
+
+        .cc-bar {
+            flex: 1;
+            background: #33C3F0;
+            min-width: 2px;
+            max-width: 8px;
+            transition: height 0.05s ease-out;
+            border-radius: 1px 1px 0 0;
+        }
+
+        .cc-bar.active {
+            background: #2ECC71;
+        }
+
+        .cc-bars-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 4px;
+        }
+
+        .cc-bars-labels span {
+            font-size: 9px;
+            color: #666;
         }
 
         /* Tooltip */
@@ -435,6 +557,31 @@
                     <button class="button" id="fitToViewBtn" title="Fit to view">Fit</button>
                     <label for="zoomSlider">Zoom</label>
                     <input type="range" id="zoomSlider" min="0.1" max="10" value="2" step="0.1">
+                </div>
+            </div>
+            <div class="transport-bar" id="transportBar">
+                <div class="transport-controls">
+                    <button class="transport-btn" id="stopBtn" title="Stop">
+                        <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" fill="currentColor" stroke="none"/></svg>
+                    </button>
+                    <button class="transport-btn" id="playPauseBtn" title="Play/Pause">
+                        <svg viewBox="0 0 24 24" id="playIcon"><polygon points="8,5 19,12 8,19" fill="currentColor" stroke="none"/></svg>
+                    </button>
+                </div>
+                <div class="timecode" id="timecode">00:00:00</div>
+            </div>
+            <div class="cc-bars-container" id="ccBarsContainer">
+                <div class="cc-bars-header">
+                    <span>CC Values (0-127)</span>
+                    <span id="activeCCCount">0 active</span>
+                </div>
+                <div class="cc-bars-wrapper" id="ccBarsWrapper"></div>
+                <div class="cc-bars-labels">
+                    <span>0</span>
+                    <span>32</span>
+                    <span>64</span>
+                    <span>96</span>
+                    <span>127</span>
                 </div>
             </div>
             <div class="graph-scroll" id="graphScroll">
@@ -546,6 +693,13 @@
         let totalDuration = 0;
         let pixelsPerSecond = 100;
 
+        // Playback state
+        let isPlaying = false;
+        let playbackTime = 0;
+        let playbackStartTimestamp = null;
+        let animationFrameId = null;
+        let ccBarValues = new Array(128).fill(0); // Current value for each CC (0-127)
+
         // DOM elements
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
@@ -563,6 +717,25 @@
         const timeRuler = document.getElementById('timeRuler');
         const lanesContainer = document.getElementById('lanesContainer');
         const tooltip = document.getElementById('tooltip');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const timecodeDisplay = document.getElementById('timecode');
+        const ccBarsContainer = document.getElementById('ccBarsContainer');
+        const ccBarsWrapper = document.getElementById('ccBarsWrapper');
+        const activeCCCount = document.getElementById('activeCCCount');
+
+        // Initialize CC bars (128 bars for CC 0-127)
+        function initCCBars() {
+            ccBarsWrapper.innerHTML = '';
+            for (let i = 0; i < 128; i++) {
+                const bar = document.createElement('div');
+                bar.className = 'cc-bar';
+                bar.style.height = '0%';
+                bar.title = `CC ${i}: ${CC_NAMES[i] || 'Unknown'}`;
+                ccBarsWrapper.appendChild(bar);
+            }
+        }
+        initCCBars();
 
         // Event listeners
         uploadArea.addEventListener('click', () => fileInput.click());
@@ -593,6 +766,146 @@
             applyFilters();
         });
         fitToViewBtn.addEventListener('click', fitToView);
+        playPauseBtn.addEventListener('click', togglePlayPause);
+        stopBtn.addEventListener('click', stopPlayback);
+
+        function togglePlayPause() {
+            if (totalDuration <= 0) return;
+
+            if (isPlaying) {
+                pausePlayback();
+            } else {
+                startPlayback();
+            }
+        }
+
+        function startPlayback() {
+            if (playbackTime >= totalDuration) {
+                playbackTime = 0;
+            }
+            isPlaying = true;
+            playbackStartTimestamp = performance.now() - (playbackTime * 1000);
+            playPauseBtn.classList.add('active');
+            playPauseBtn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" fill="currentColor" stroke="none"/><rect x="14" y="5" width="4" height="14" fill="currentColor" stroke="none"/></svg>';
+            ccBarsContainer.classList.add('visible');
+            animationFrameId = requestAnimationFrame(updatePlayback);
+        }
+
+        function pausePlayback() {
+            isPlaying = false;
+            playPauseBtn.classList.remove('active');
+            playPauseBtn.innerHTML = '<svg viewBox="0 0 24 24"><polygon points="8,5 19,12 8,19" fill="currentColor" stroke="none"/></svg>';
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+        }
+
+        function stopPlayback() {
+            pausePlayback();
+            playbackTime = 0;
+            updateTimecodeDisplay(0);
+            updatePlayhead(0);
+            resetCCBars();
+        }
+
+        function resetCCBars() {
+            ccBarValues.fill(0);
+            const bars = ccBarsWrapper.children;
+            for (let i = 0; i < bars.length; i++) {
+                bars[i].style.height = '0%';
+                bars[i].classList.remove('active');
+            }
+            activeCCCount.textContent = '0 active';
+        }
+
+        function updatePlayback(timestamp) {
+            if (!isPlaying) return;
+
+            playbackTime = (timestamp - playbackStartTimestamp) / 1000;
+
+            if (playbackTime >= totalDuration) {
+                playbackTime = totalDuration;
+                pausePlayback();
+            }
+
+            updateTimecodeDisplay(playbackTime);
+            updatePlayhead(playbackTime);
+            updateCCBars(playbackTime);
+
+            if (isPlaying) {
+                animationFrameId = requestAnimationFrame(updatePlayback);
+            }
+        }
+
+        function updateTimecodeDisplay(time) {
+            const hours = Math.floor(time / 3600);
+            const minutes = Math.floor((time % 3600) / 60);
+            const seconds = Math.floor(time % 60);
+            timecodeDisplay.textContent =
+                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        function updatePlayhead(time) {
+            const playhead = document.getElementById('playhead');
+            if (playhead) {
+                const xPos = time * pixelsPerSecond;
+                playhead.style.left = xPos + 'px';
+
+                // Auto-scroll to keep playhead visible
+                const scrollLeft = graphScroll.scrollLeft;
+                const viewWidth = graphScroll.clientWidth - 150; // minus lane labels
+                if (xPos > scrollLeft + viewWidth - 50 || xPos < scrollLeft) {
+                    graphScroll.scrollLeft = Math.max(0, xPos - 100);
+                }
+            }
+        }
+
+        function updateCCBars(time) {
+            // Build current state from all CC messages up to current time
+            const currentValues = new Array(128).fill(0);
+            const activeChannels = new Set();
+
+            // Get filtered messages based on current filter settings
+            const channelValue = channelFilter.value;
+            const ccValue = ccFilter.value;
+
+            let relevantMessages = allCCMessages.filter(m => m.time <= time);
+
+            if (channelValue !== 'all') {
+                relevantMessages = relevantMessages.filter(m => m.channel === parseInt(channelValue));
+            }
+
+            if (ccValue !== 'all') {
+                relevantMessages = relevantMessages.filter(m => m.cc === parseInt(ccValue));
+            }
+
+            // Get latest value for each CC
+            relevantMessages.forEach(msg => {
+                currentValues[msg.cc] = msg.value;
+                if (msg.value > 0) {
+                    activeChannels.add(msg.cc);
+                }
+            });
+
+            // Update bars
+            const bars = ccBarsWrapper.children;
+            let activeCount = 0;
+            for (let i = 0; i < 128; i++) {
+                const value = currentValues[i];
+                const heightPercent = (value / 127) * 100;
+                bars[i].style.height = heightPercent + '%';
+
+                if (value > 0) {
+                    bars[i].classList.add('active');
+                    activeCount++;
+                } else {
+                    bars[i].classList.remove('active');
+                }
+            }
+
+            activeCCCount.textContent = `${activeCount} active`;
+        }
 
         function fitToView() {
             if (totalDuration <= 0) return;
@@ -622,6 +935,9 @@
         }
 
         function parseMidiFile(data, fileName) {
+            // Stop any existing playback
+            stopPlayback();
+
             let pos = 0;
 
             const headerChunk = readString(data, pos, 4);
@@ -735,6 +1051,9 @@
 
             populateFilters();
             filters.classList.remove('hidden');
+
+            // Show CC bars
+            ccBarsContainer.classList.add('visible');
 
             applyFilters();
         }
