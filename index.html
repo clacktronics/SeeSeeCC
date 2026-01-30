@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SeeSeeCC - MIDI CC Viewer</title>
+    <link href="https://fonts.googleapis.com/css?family=Raleway:400,300,600" rel="stylesheet" type="text/css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.min.css">
+    <style>
+        /* Skeleton-inspired custom styles */
+        :root {
+            --primary: #33C3F0;
+            --primary-hover: #1EAEDB;
+            --text: #222;
+            --text-light: #666;
+            --border: #D1D1D1;
+            --bg-light: #F1F1F1;
+            --bg-white: #FFF;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background: var(--bg-light);
+            padding: 20px 0;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 2rem;
+            color: var(--primary);
+            letter-spacing: 0.1em;
+        }
+
+        .upload-area {
+            border: 2px dashed var(--border);
+            border-radius: 4px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+            background: var(--bg-white);
+        }
+
+        .upload-area:hover {
+            border-color: var(--primary);
+            background: rgba(51, 195, 240, 0.05);
+        }
+
+        .upload-area.dragover {
+            border-color: var(--primary);
+            background: rgba(51, 195, 240, 0.1);
+        }
+
+        .upload-area input {
+            display: none;
+        }
+
+        .upload-area p {
+            margin: 0;
+            color: var(--text-light);
+        }
+
+        .card {
+            background: var(--bg-white);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card h5 {
+            color: var(--primary);
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        .stats-row {
+            display: flex;
+            gap: 30px;
+            flex-wrap: wrap;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-light);
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .filters-row {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            margin-bottom: 20px;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-group label {
+            font-weight: 600;
+        }
+
+        .filter-group select {
+            margin-bottom: 0;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* DAW-style graph container */
+        .graph-container {
+            background: var(--bg-white);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .graph-header {
+            background: var(--bg-light);
+            border-bottom: 1px solid var(--border);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .graph-header h6 {
+            margin: 0;
+            color: var(--text);
+        }
+
+        .graph-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .graph-controls label {
+            font-size: 12px;
+            margin: 0;
+            color: var(--text-light);
+        }
+
+        .graph-controls input[type="range"] {
+            width: 100px;
+        }
+
+        .graph-controls .button {
+            height: 28px;
+            line-height: 28px;
+            padding: 0 12px;
+            font-size: 11px;
+            margin: 0;
+        }
+
+        .graph-scroll {
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+
+        .graph-wrapper {
+            display: flex;
+            min-width: 100%;
+        }
+
+        /* Lane labels sidebar */
+        .lane-labels {
+            flex-shrink: 0;
+            width: 150px;
+            background: var(--bg-light);
+            border-right: 1px solid var(--border);
+        }
+
+        .lane-label {
+            height: 80px;
+            padding: 0 15px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            border-bottom: 1px solid var(--border);
+            font-size: 12px;
+        }
+
+        .lane-label-cc {
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .lane-label-name {
+            color: var(--text-light);
+            font-size: 11px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .lane-label-channel {
+            font-size: 10px;
+            color: var(--primary);
+            margin-top: 2px;
+        }
+
+        /* Graph canvas area */
+        .graph-canvas-area {
+            flex-grow: 1;
+            position: relative;
+        }
+
+        .time-ruler {
+            height: 25px;
+            background: var(--bg-light);
+            border-bottom: 1px solid var(--border);
+            position: relative;
+        }
+
+        .time-marker {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            font-size: 10px;
+            color: var(--text-light);
+            padding: 5px 5px;
+            border-left: 1px solid var(--border);
+        }
+
+        .lanes-container {
+            position: relative;
+        }
+
+        .lane {
+            height: 80px;
+            border-bottom: 1px solid var(--border);
+            position: relative;
+            background: var(--bg-white);
+        }
+
+        .lane:nth-child(even) {
+            background: rgba(0, 0, 0, 0.02);
+        }
+
+        /* Grid lines */
+        .lane-grid {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+        }
+
+        .grid-line {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 1px;
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        .grid-line.major {
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        /* CC data visualization */
+        .cc-lane-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Value axis labels */
+        .value-axis {
+            position: absolute;
+            right: 5px;
+            top: 0;
+            bottom: 0;
+            width: 25px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            font-size: 9px;
+            color: var(--text-light);
+            padding: 2px 0;
+            pointer-events: none;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-light);
+        }
+
+        .empty-state svg {
+            width: 60px;
+            height: 60px;
+            margin-bottom: 15px;
+            stroke: var(--border);
+        }
+
+        /* Playhead */
+        .playhead {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #E74C3C;
+            pointer-events: none;
+            z-index: 10;
+            display: none;
+        }
+
+        .playhead::before {
+            content: '';
+            position: absolute;
+            top: -5px;
+            left: -4px;
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 6px solid #E74C3C;
+        }
+
+        /* Tooltip */
+        .tooltip {
+            position: fixed;
+            background: var(--text);
+            color: var(--bg-white);
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 100;
+            display: none;
+            white-space: nowrap;
+        }
+
+        .tooltip-time {
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .tooltip-value {
+            margin-left: 10px;
+        }
+
+        /* Responsive */
+        @media (max-width: 550px) {
+            .lane-labels {
+                width: 100px;
+            }
+
+            .lane-label {
+                padding: 0 10px;
+            }
+
+            .stats-row {
+                gap: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SeeSeeCC</h1>
+
+        <div class="upload-area" id="uploadArea">
+            <input type="file" id="fileInput" accept=".mid,.midi">
+            <p>Drop a MIDI file here or click to browse</p>
+        </div>
+
+        <div class="card hidden" id="fileInfo">
+            <h5 id="fileName">File Name</h5>
+            <div class="stats-row">
+                <div class="stat">
+                    <div class="stat-label">Format</div>
+                    <div class="stat-value" id="formatType">-</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Tracks</div>
+                    <div class="stat-value" id="trackCount">-</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">CC Messages</div>
+                    <div class="stat-value" id="ccCount">-</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Duration</div>
+                    <div class="stat-value" id="duration">-</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="filters-row hidden" id="filters">
+            <div class="filter-group">
+                <label for="channelFilter">Channel</label>
+                <select id="channelFilter">
+                    <option value="all">All Channels</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="ccFilter">CC Number</label>
+                <select id="ccFilter">
+                    <option value="all">All CC</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="graph-container" id="graphContainer">
+            <div class="graph-header">
+                <h6>CC Automation</h6>
+                <div class="graph-controls">
+                    <button class="button" id="fitToViewBtn" title="Fit to view">Fit</button>
+                    <label for="zoomSlider">Zoom</label>
+                    <input type="range" id="zoomSlider" min="0.1" max="10" value="2" step="0.1">
+                </div>
+            </div>
+            <div class="graph-scroll" id="graphScroll">
+                <div class="graph-wrapper" id="graphWrapper">
+                    <div class="lane-labels" id="laneLabels"></div>
+                    <div class="graph-canvas-area" id="graphCanvasArea">
+                        <div class="time-ruler" id="timeRuler"></div>
+                        <div class="lanes-container" id="lanesContainer">
+                            <div class="playhead" id="playhead"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="empty-state" id="emptyState">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"/>
+                </svg>
+                <p>Load a MIDI file to view CC automation</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="tooltip" id="tooltip">
+        <span class="tooltip-time"></span>
+        <span class="tooltip-value"></span>
+    </div>
+
+    <script>
+        // Standard MIDI CC names
+        const CC_NAMES = {
+            0: 'Bank Select (MSB)',
+            1: 'Modulation Wheel',
+            2: 'Breath Controller',
+            4: 'Foot Controller',
+            5: 'Portamento Time',
+            6: 'Data Entry (MSB)',
+            7: 'Channel Volume',
+            8: 'Balance',
+            10: 'Pan',
+            11: 'Expression',
+            12: 'Effect Control 1',
+            13: 'Effect Control 2',
+            16: 'General Purpose 1',
+            17: 'General Purpose 2',
+            18: 'General Purpose 3',
+            19: 'General Purpose 4',
+            32: 'Bank Select (LSB)',
+            33: 'Modulation (LSB)',
+            34: 'Breath (LSB)',
+            36: 'Foot Controller (LSB)',
+            37: 'Portamento Time (LSB)',
+            38: 'Data Entry (LSB)',
+            39: 'Volume (LSB)',
+            40: 'Balance (LSB)',
+            42: 'Pan (LSB)',
+            43: 'Expression (LSB)',
+            64: 'Sustain Pedal',
+            65: 'Portamento On/Off',
+            66: 'Sostenuto',
+            67: 'Soft Pedal',
+            68: 'Legato Footswitch',
+            69: 'Hold 2',
+            70: 'Sound Variation',
+            71: 'Timbre/Resonance',
+            72: 'Release Time',
+            73: 'Attack Time',
+            74: 'Brightness/Cutoff',
+            75: 'Sound Control 6',
+            76: 'Sound Control 7',
+            77: 'Sound Control 8',
+            78: 'Sound Control 9',
+            79: 'Sound Control 10',
+            80: 'General Purpose 5',
+            81: 'General Purpose 6',
+            82: 'General Purpose 7',
+            83: 'General Purpose 8',
+            84: 'Portamento Control',
+            91: 'Reverb Depth',
+            92: 'Tremolo Depth',
+            93: 'Chorus Depth',
+            94: 'Detune Depth',
+            95: 'Phaser Depth',
+            96: 'Data Increment',
+            97: 'Data Decrement',
+            98: 'NRPN (LSB)',
+            99: 'NRPN (MSB)',
+            100: 'RPN (LSB)',
+            101: 'RPN (MSB)',
+            120: 'All Sound Off',
+            121: 'Reset All Controllers',
+            122: 'Local Control',
+            123: 'All Notes Off',
+            124: 'Omni Mode Off',
+            125: 'Omni Mode On',
+            126: 'Mono Mode',
+            127: 'Poly Mode'
+        };
+
+        // Color palette for different CC lanes
+        const LANE_COLORS = [
+            '#33C3F0', '#E74C3C', '#2ECC71', '#F39C12', '#9B59B6',
+            '#1ABC9C', '#E67E22', '#3498DB', '#E91E63', '#00BCD4'
+        ];
+
+        // Maximum canvas width (browsers typically limit to ~32767px)
+        const MAX_CANVAS_WIDTH = 16000;
+
+        let allCCMessages = [];
+        let totalDuration = 0;
+        let pixelsPerSecond = 100;
+
+        // DOM elements
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const filters = document.getElementById('filters');
+        const emptyState = document.getElementById('emptyState');
+        const channelFilter = document.getElementById('channelFilter');
+        const ccFilter = document.getElementById('ccFilter');
+        const zoomSlider = document.getElementById('zoomSlider');
+        const fitToViewBtn = document.getElementById('fitToViewBtn');
+        const graphWrapper = document.getElementById('graphWrapper');
+        const graphScroll = document.getElementById('graphScroll');
+        const graphCanvasArea = document.getElementById('graphCanvasArea');
+        const laneLabels = document.getElementById('laneLabels');
+        const timeRuler = document.getElementById('timeRuler');
+        const lanesContainer = document.getElementById('lanesContainer');
+        const tooltip = document.getElementById('tooltip');
+
+        // Event listeners
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && (file.name.endsWith('.mid') || file.name.endsWith('.midi'))) {
+                loadMidiFile(file);
+            }
+        });
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files[0]) {
+                loadMidiFile(e.target.files[0]);
+            }
+        });
+        channelFilter.addEventListener('change', applyFilters);
+        ccFilter.addEventListener('change', applyFilters);
+        zoomSlider.addEventListener('input', () => {
+            pixelsPerSecond = 50 * parseFloat(zoomSlider.value);
+            applyFilters();
+        });
+        fitToViewBtn.addEventListener('click', fitToView);
+
+        function fitToView() {
+            if (totalDuration <= 0) return;
+
+            // Get available width (scroll container width minus lane labels)
+            const availableWidth = graphScroll.clientWidth - 150; // 150px is lane labels width
+
+            // Calculate pixels per second to fit entire duration
+            const targetPPS = Math.max(10, availableWidth / totalDuration);
+
+            // Update slider value (slider value = pps / 50)
+            const sliderValue = Math.max(0.1, Math.min(10, targetPPS / 50));
+            zoomSlider.value = sliderValue;
+
+            // Update and render
+            pixelsPerSecond = targetPPS;
+            applyFilters();
+        }
+
+        function loadMidiFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const data = new Uint8Array(e.target.result);
+                parseMidiFile(data, file.name);
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function parseMidiFile(data, fileName) {
+            let pos = 0;
+
+            const headerChunk = readString(data, pos, 4);
+            if (headerChunk !== 'MThd') {
+                alert('Invalid MIDI file');
+                return;
+            }
+            pos += 4;
+
+            const headerLength = readInt(data, pos, 4);
+            pos += 4;
+
+            const format = readInt(data, pos, 2);
+            pos += 2;
+
+            const numTracks = readInt(data, pos, 2);
+            pos += 2;
+
+            const timeDivision = readInt(data, pos, 2);
+            pos += 2;
+
+            const ticksPerBeat = timeDivision & 0x7FFF;
+
+            allCCMessages = [];
+            let tempo = 500000;
+            let maxTick = 0;
+
+            for (let track = 0; track < numTracks; track++) {
+                const trackChunk = readString(data, pos, 4);
+                if (trackChunk !== 'MTrk') {
+                    console.warn('Invalid track chunk');
+                    break;
+                }
+                pos += 4;
+
+                const trackLength = readInt(data, pos, 4);
+                pos += 4;
+
+                const trackEnd = pos + trackLength;
+                let tick = 0;
+                let runningStatus = 0;
+
+                while (pos < trackEnd) {
+                    const deltaResult = readVariableLength(data, pos);
+                    tick += deltaResult.value;
+                    pos = deltaResult.pos;
+
+                    if (tick > maxTick) maxTick = tick;
+
+                    let status = data[pos];
+
+                    if (status < 0x80) {
+                        status = runningStatus;
+                    } else {
+                        pos++;
+                        if (status < 0xF0) {
+                            runningStatus = status;
+                        }
+                    }
+
+                    const eventType = status & 0xF0;
+                    const channel = (status & 0x0F) + 1;
+
+                    if (status === 0xFF) {
+                        const metaType = data[pos++];
+                        const lengthResult = readVariableLength(data, pos);
+                        const length = lengthResult.value;
+                        pos = lengthResult.pos;
+
+                        if (metaType === 0x51 && length === 3) {
+                            tempo = (data[pos] << 16) | (data[pos + 1] << 8) | data[pos + 2];
+                        }
+
+                        pos += length;
+                    } else if (status === 0xF0 || status === 0xF7) {
+                        const lengthResult = readVariableLength(data, pos);
+                        pos = lengthResult.pos + lengthResult.value;
+                    } else if (eventType === 0xB0) {
+                        const ccNumber = data[pos++];
+                        const ccValue = data[pos++];
+
+                        const timeInSeconds = tickToSeconds(tick, ticksPerBeat, tempo);
+
+                        allCCMessages.push({
+                            tick,
+                            time: timeInSeconds,
+                            channel,
+                            cc: ccNumber,
+                            value: ccValue,
+                            track: track + 1
+                        });
+                    } else if (eventType === 0x80 || eventType === 0x90 || eventType === 0xA0 || eventType === 0xE0) {
+                        pos += 2;
+                    } else if (eventType === 0xC0 || eventType === 0xD0) {
+                        pos += 1;
+                    }
+                }
+            }
+
+            allCCMessages.sort((a, b) => a.tick - b.tick);
+
+            totalDuration = tickToSeconds(maxTick, ticksPerBeat, tempo);
+
+            document.getElementById('fileName').textContent = fileName;
+            document.getElementById('formatType').textContent = `Type ${format}`;
+            document.getElementById('trackCount').textContent = numTracks;
+            document.getElementById('ccCount').textContent = allCCMessages.length;
+            document.getElementById('duration').textContent = formatTime(totalDuration);
+
+            fileInfo.classList.remove('hidden');
+
+            populateFilters();
+            filters.classList.remove('hidden');
+
+            applyFilters();
+        }
+
+        function readString(data, pos, length) {
+            let str = '';
+            for (let i = 0; i < length; i++) {
+                str += String.fromCharCode(data[pos + i]);
+            }
+            return str;
+        }
+
+        function readInt(data, pos, length) {
+            let value = 0;
+            for (let i = 0; i < length; i++) {
+                value = (value << 8) | data[pos + i];
+            }
+            return value;
+        }
+
+        function readVariableLength(data, pos) {
+            let value = 0;
+            let byte;
+            do {
+                byte = data[pos++];
+                value = (value << 7) | (byte & 0x7F);
+            } while (byte & 0x80);
+            return { value, pos };
+        }
+
+        function tickToSeconds(tick, ticksPerBeat, tempo) {
+            return (tick / ticksPerBeat) * (tempo / 1000000);
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            const ms = Math.floor((seconds % 1) * 1000);
+            return `${mins}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+        }
+
+        function formatTimeShort(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function populateFilters() {
+            const channels = [...new Set(allCCMessages.map(m => m.channel))].sort((a, b) => a - b);
+            const ccNumbers = [...new Set(allCCMessages.map(m => m.cc))].sort((a, b) => a - b);
+
+            channelFilter.innerHTML = '<option value="all">All Channels</option>';
+            channels.forEach(ch => {
+                channelFilter.innerHTML += `<option value="${ch}">Channel ${ch}</option>`;
+            });
+
+            ccFilter.innerHTML = '<option value="all">All CC</option>';
+            ccNumbers.forEach(cc => {
+                const name = CC_NAMES[cc] || '';
+                ccFilter.innerHTML += `<option value="${cc}">CC ${cc}${name ? ` - ${name}` : ''}</option>`;
+            });
+        }
+
+        function applyFilters() {
+            const channelValue = channelFilter.value;
+            const ccValue = ccFilter.value;
+
+            let filtered = allCCMessages;
+
+            if (channelValue !== 'all') {
+                filtered = filtered.filter(m => m.channel === parseInt(channelValue));
+            }
+
+            if (ccValue !== 'all') {
+                filtered = filtered.filter(m => m.cc === parseInt(ccValue));
+            }
+
+            renderGraph(filtered);
+        }
+
+        function renderGraph(messages) {
+            if (messages.length === 0) {
+                laneLabels.innerHTML = '';
+                timeRuler.innerHTML = '';
+                lanesContainer.innerHTML = '<div class="playhead" id="playhead"></div>';
+                emptyState.style.display = 'block';
+                return;
+            }
+
+            emptyState.style.display = 'none';
+
+            // Group messages by CC number and channel
+            const lanes = {};
+            messages.forEach(msg => {
+                const key = `${msg.channel}-${msg.cc}`;
+                if (!lanes[key]) {
+                    lanes[key] = {
+                        channel: msg.channel,
+                        cc: msg.cc,
+                        messages: []
+                    };
+                }
+                lanes[key].messages.push(msg);
+            });
+
+            const laneList = Object.values(lanes).sort((a, b) => {
+                if (a.channel !== b.channel) return a.channel - b.channel;
+                return a.cc - b.cc;
+            });
+
+            const graphWidth = Math.max(800, totalDuration * pixelsPerSecond);
+            const canvasWidth = Math.min(graphWidth, MAX_CANVAS_WIDTH);
+            const scale = canvasWidth / graphWidth;
+
+            graphCanvasArea.style.width = graphWidth + 'px';
+
+            // Render time ruler
+            renderTimeRuler(graphWidth);
+
+            // Render lane labels
+            laneLabels.innerHTML = '';
+            const labelHeader = document.createElement('div');
+            labelHeader.className = 'lane-label';
+            labelHeader.style.height = '25px';
+            labelHeader.style.background = 'var(--bg-light)';
+            laneLabels.appendChild(labelHeader);
+
+            laneList.forEach((lane, index) => {
+                const label = document.createElement('div');
+                label.className = 'lane-label';
+                label.innerHTML = `
+                    <div class="lane-label-cc" style="color: ${LANE_COLORS[index % LANE_COLORS.length]}">CC ${lane.cc}</div>
+                    <div class="lane-label-name">${CC_NAMES[lane.cc] || 'Unknown'}</div>
+                    <div class="lane-label-channel">Ch ${lane.channel}</div>
+                `;
+                laneLabels.appendChild(label);
+            });
+
+            // Render lanes
+            lanesContainer.innerHTML = '<div class="playhead" id="playhead"></div>';
+
+            laneList.forEach((lane, index) => {
+                const laneEl = document.createElement('div');
+                laneEl.className = 'lane';
+                laneEl.dataset.laneIndex = index;
+
+                // Create canvas for this lane
+                const canvas = document.createElement('canvas');
+                canvas.className = 'cc-lane-canvas';
+                canvas.width = canvasWidth;
+                canvas.height = 80;
+                canvas.style.width = graphWidth + 'px';
+                canvas.style.height = '80px';
+                laneEl.appendChild(canvas);
+
+                // Value axis
+                const valueAxis = document.createElement('div');
+                valueAxis.className = 'value-axis';
+                valueAxis.innerHTML = '<span>127</span><span>64</span><span>0</span>';
+                laneEl.appendChild(valueAxis);
+
+                // Draw the CC data with scale factor
+                drawLaneData(canvas, lane.messages, LANE_COLORS[index % LANE_COLORS.length], scale);
+
+                // Tooltip handling
+                laneEl.addEventListener('mousemove', (e) => {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const time = x / pixelsPerSecond;
+
+                    // Find closest message
+                    let closest = null;
+                    let closestDist = Infinity;
+                    lane.messages.forEach(msg => {
+                        const dist = Math.abs(msg.time - time);
+                        if (dist < closestDist) {
+                            closestDist = dist;
+                            closest = msg;
+                        }
+                    });
+
+                    if (closest && closestDist < 0.5) {
+                        tooltip.style.display = 'block';
+                        tooltip.style.left = (e.clientX + 10) + 'px';
+                        tooltip.style.top = (e.clientY - 30) + 'px';
+                        tooltip.innerHTML = `
+                            <span class="tooltip-time">${formatTime(closest.time)}</span>
+                            <span class="tooltip-value">Value: ${closest.value}</span>
+                        `;
+                    } else {
+                        tooltip.style.display = 'none';
+                    }
+                });
+
+                laneEl.addEventListener('mouseleave', () => {
+                    tooltip.style.display = 'none';
+                });
+
+                lanesContainer.appendChild(laneEl);
+            });
+
+            // Add grid lines
+            addGridLines(graphWidth, laneList.length);
+        }
+
+        function renderTimeRuler(width) {
+            timeRuler.innerHTML = '';
+
+            // Calculate appropriate interval based on zoom
+            let interval = 1;
+            if (pixelsPerSecond < 30) interval = 10;
+            else if (pixelsPerSecond < 60) interval = 5;
+            else if (pixelsPerSecond < 120) interval = 2;
+            else if (pixelsPerSecond > 300) interval = 0.5;
+
+            for (let t = 0; t <= totalDuration; t += interval) {
+                const marker = document.createElement('div');
+                marker.className = 'time-marker';
+                marker.style.left = (t * pixelsPerSecond) + 'px';
+                marker.textContent = formatTimeShort(t);
+                timeRuler.appendChild(marker);
+            }
+        }
+
+        function addGridLines(width, laneCount) {
+            let interval = 1;
+            if (pixelsPerSecond < 30) interval = 10;
+            else if (pixelsPerSecond < 60) interval = 5;
+            else if (pixelsPerSecond < 120) interval = 2;
+
+            const lanes = lanesContainer.querySelectorAll('.lane');
+            lanes.forEach(lane => {
+                const grid = document.createElement('div');
+                grid.className = 'lane-grid';
+
+                for (let t = 0; t <= totalDuration; t += interval) {
+                    const line = document.createElement('div');
+                    line.className = 'grid-line' + (t % (interval * 5) === 0 ? ' major' : '');
+                    line.style.left = (t * pixelsPerSecond) + 'px';
+                    grid.appendChild(line);
+                }
+
+                lane.appendChild(grid);
+            });
+        }
+
+        function drawLaneData(canvas, messages, color, scale = 1) {
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+            const padding = 5;
+            const drawHeight = height - padding * 2;
+
+            ctx.clearRect(0, 0, width, height);
+
+            if (messages.length === 0) return;
+
+            // Scale factor for x coordinates
+            const effectivePPS = pixelsPerSecond * scale;
+
+            // Draw filled area
+            ctx.beginPath();
+            ctx.moveTo(0, height - padding);
+
+            // Start from first point
+            const firstX = messages[0].time * effectivePPS;
+            const firstY = height - padding - (messages[0].value / 127) * drawHeight;
+            ctx.lineTo(firstX, height - padding);
+            ctx.lineTo(firstX, firstY);
+
+            // Draw step-style automation (like most DAWs)
+            for (let i = 0; i < messages.length; i++) {
+                const msg = messages[i];
+                const x = msg.time * effectivePPS;
+                const y = height - padding - (msg.value / 127) * drawHeight;
+
+                if (i > 0) {
+                    // Horizontal line to this point (step)
+                    ctx.lineTo(x, height - padding - (messages[i-1].value / 127) * drawHeight);
+                }
+                // Vertical line to new value
+                ctx.lineTo(x, y);
+            }
+
+            // Complete the fill
+            ctx.lineTo(width, height - padding - (messages[messages.length - 1].value / 127) * drawHeight);
+            ctx.lineTo(width, height - padding);
+            ctx.closePath();
+
+            // Fill with gradient
+            const gradient = ctx.createLinearGradient(0, 0, 0, height);
+            gradient.addColorStop(0, color + '40');
+            gradient.addColorStop(1, color + '10');
+            ctx.fillStyle = gradient;
+            ctx.fill();
+
+            // Draw line
+            ctx.beginPath();
+            for (let i = 0; i < messages.length; i++) {
+                const msg = messages[i];
+                const x = msg.time * effectivePPS;
+                const y = height - padding - (msg.value / 127) * drawHeight;
+
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    // Step style
+                    ctx.lineTo(x, height - padding - (messages[i-1].value / 127) * drawHeight);
+                    ctx.lineTo(x, y);
+                }
+            }
+
+            // Extend to end
+            ctx.lineTo(width, height - padding - (messages[messages.length - 1].value / 127) * drawHeight);
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            // Draw points (scale point size down slightly when zoomed to avoid clutter)
+            const pointRadius = Math.max(2, 3 * scale);
+            ctx.fillStyle = color;
+            messages.forEach(msg => {
+                const x = msg.time * effectivePPS;
+                const y = height - padding - (msg.value / 127) * drawHeight;
+                ctx.beginPath();
+                ctx.arc(x, y, pointRadius, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+    </script>
+</body>
+</html>
