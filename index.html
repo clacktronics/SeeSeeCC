@@ -536,9 +536,7 @@
             border-radius: 1px 1px 0 0;
         }
 
-        .cc-bar.active {
-            background: #2ECC71;
-        }
+        /* .cc-bar.active color is now set dynamically based on file */
 
         .cc-bars-labels {
             display: flex;
@@ -978,6 +976,7 @@
             for (let i = 0; i < bars.length; i++) {
                 bars[i].style.height = '0%';
                 bars[i].classList.remove('active');
+                bars[i].style.background = '#33C3F0'; // Reset to default color
             }
             activeCCCount.textContent = '0 active';
         }
@@ -1028,8 +1027,8 @@
 
         function updateCCBars(time) {
             // Build current state from all CC messages up to current time
-            const currentValues = new Array(128).fill(0);
-            const activeChannels = new Set();
+            // Track both value and color (from file) for each CC
+            const currentState = new Array(128).fill(null).map(() => ({ value: 0, color: null }));
 
             // Get filtered messages based on current filter settings
             const fileValue = fileFilter.value;
@@ -1050,27 +1049,28 @@
                 relevantMessages = relevantMessages.filter(m => m.cc === parseInt(ccValue));
             }
 
-            // Get latest value for each CC
+            // Get latest value and color for each CC
             relevantMessages.forEach(msg => {
-                currentValues[msg.cc] = msg.value;
-                if (msg.value > 0) {
-                    activeChannels.add(msg.cc);
-                }
+                currentState[msg.cc].value = msg.value;
+                currentState[msg.cc].color = msg.color;
             });
 
             // Update bars
             const bars = ccBarsWrapper.children;
             let activeCount = 0;
             for (let i = 0; i < 128; i++) {
-                const value = currentValues[i];
+                const { value, color } = currentState[i];
                 const heightPercent = (value / 127) * 100;
                 bars[i].style.height = heightPercent + '%';
 
                 if (value > 0) {
                     bars[i].classList.add('active');
+                    // Apply the file's color to the bar
+                    bars[i].style.background = color || '#33C3F0';
                     activeCount++;
                 } else {
                     bars[i].classList.remove('active');
+                    bars[i].style.background = '#33C3F0'; // Reset to default
                 }
             }
 
