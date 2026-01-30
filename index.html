@@ -529,14 +529,23 @@
 
         .cc-bar {
             flex: 1;
-            background: #33C3F0;
             min-width: 2px;
             max-width: 8px;
-            transition: height 0.05s ease-out;
-            border-radius: 1px 1px 0 0;
+            display: flex;
+            flex-direction: column-reverse;
+            align-items: stretch;
+            height: 100%;
+            justify-content: flex-start;
         }
 
-        /* .cc-bar.active color is now set dynamically based on file */
+        .cc-bar-segment {
+            width: 100%;
+            transition: height 0.05s ease-out;
+        }
+
+        .cc-bar-segment:last-child {
+            border-radius: 1px 1px 0 0;
+        }
 
         .cc-bars-labels {
             display: flex;
@@ -824,7 +833,7 @@
             for (let i = 0; i < 128; i++) {
                 const bar = document.createElement('div');
                 bar.className = 'cc-bar';
-                bar.style.height = '0%';
+                bar.dataset.cc = i;
                 bar.title = `CC ${i}: ${CC_NAMES[i] || 'Unknown'}`;
                 ccBarsWrapper.appendChild(bar);
             }
@@ -974,9 +983,8 @@
             ccBarValues.fill(0);
             const bars = ccBarsWrapper.children;
             for (let i = 0; i < bars.length; i++) {
-                bars[i].style.height = '0%';
+                bars[i].innerHTML = ''; // Clear all segments
                 bars[i].classList.remove('active');
-                bars[i].style.background = '#33C3F0'; // Reset to default color
             }
             activeCCCount.textContent = '0 active';
         }
@@ -1027,8 +1035,9 @@
 
         function updateCCBars(time) {
             // Build current state from all CC messages up to current time
-            // Track both value and color (from file) for each CC
-            const currentState = new Array(128).fill(null).map(() => ({ value: 0, color: null }));
+            // Track value per file for each CC (to show stacked bars)
+            // currentState[cc][fileId] = { value, color }
+            const currentState = new Array(128).fill(null).map(() => ({}));
 
             // Get filtered messages based on current filter settings
             const fileValue = fileFilter.value;
@@ -1049,28 +1058,47 @@
                 relevantMessages = relevantMessages.filter(m => m.cc === parseInt(ccValue));
             }
 
-            // Get latest value and color for each CC
+            // Get latest value per file for each CC
             relevantMessages.forEach(msg => {
-                currentState[msg.cc].value = msg.value;
-                currentState[msg.cc].color = msg.color;
+                currentState[msg.cc][msg.fileId] = {
+                    value: msg.value,
+                    color: msg.color
+                };
             });
 
-            // Update bars
+            // Update bars with stacked segments
             const bars = ccBarsWrapper.children;
             let activeCount = 0;
-            for (let i = 0; i < 128; i++) {
-                const { value, color } = currentState[i];
-                const heightPercent = (value / 127) * 100;
-                bars[i].style.height = heightPercent + '%';
 
-                if (value > 0) {
-                    bars[i].classList.add('active');
-                    // Apply the file's color to the bar
-                    bars[i].style.background = color || '#33C3F0';
+            for (let i = 0; i < 128; i++) {
+                const bar = bars[i];
+                bar.innerHTML = ''; // Clear existing segments
+
+                const fileStates = currentState[i];
+                const fileIds = Object.keys(fileStates).map(Number);
+
+                // Sort by file ID for consistent stacking order
+                fileIds.sort((a, b) => a - b);
+
+                let hasActive = false;
+                fileIds.forEach(fileId => {
+                    const { value, color } = fileStates[fileId];
+                    if (value > 0) {
+                        hasActive = true;
+                        const heightPercent = (value / 127) * 100;
+                        const segment = document.createElement('div');
+                        segment.className = 'cc-bar-segment';
+                        segment.style.height = heightPercent + '%';
+                        segment.style.background = color;
+                        bar.appendChild(segment);
+                    }
+                });
+
+                if (hasActive) {
+                    bar.classList.add('active');
                     activeCount++;
                 } else {
-                    bars[i].classList.remove('active');
-                    bars[i].style.background = '#33C3F0'; // Reset to default
+                    bar.classList.remove('active');
                 }
             }
 
