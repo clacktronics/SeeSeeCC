@@ -559,12 +559,8 @@
             </div>
             <div class="transport-bar" id="transportBar">
                 <div class="transport-controls">
-                    <button class="transport-btn" id="stopBtn" title="Stop">
-                        <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" fill="currentColor" stroke="none"/></svg>
-                    </button>
-                    <button class="transport-btn" id="playPauseBtn" title="Play/Pause">
-                        <svg viewBox="0 0 24 24" id="playIcon"><polygon points="8,5 19,12 8,19" fill="currentColor" stroke="none"/></svg>
-                    </button>
+                    <button class="button" id="stopBtn" title="Stop">Stop</button>
+                    <button class="button button-primary" id="playPauseBtn" title="Play/Pause">Play</button>
                 </div>
                 <div class="timecode" id="timecode">00:00:00</div>
             </div>
@@ -783,16 +779,14 @@
             }
             isPlaying = true;
             playbackStartTimestamp = performance.now() - (playbackTime * 1000);
-            playPauseBtn.classList.add('active');
-            playPauseBtn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" fill="currentColor" stroke="none"/><rect x="14" y="5" width="4" height="14" fill="currentColor" stroke="none"/></svg>';
+            playPauseBtn.textContent = 'Pause';
             ccBarsContainer.classList.add('visible');
             animationFrameId = requestAnimationFrame(updatePlayback);
         }
 
         function pausePlayback() {
             isPlaying = false;
-            playPauseBtn.classList.remove('active');
-            playPauseBtn.innerHTML = '<svg viewBox="0 0 24 24"><polygon points="8,5 19,12 8,19" fill="currentColor" stroke="none"/></svg>';
+            playPauseBtn.textContent = 'Play';
             if (animationFrameId) {
                 cancelAnimationFrame(animationFrameId);
                 animationFrameId = null;
