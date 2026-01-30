@@ -346,6 +346,16 @@
             border-left: 5px solid transparent;
             border-right: 5px solid transparent;
             border-top: 6px solid #E74C3C;
+            pointer-events: auto;
+            cursor: ew-resize;
+        }
+
+        .playhead.dragging {
+            pointer-events: auto;
+        }
+
+        .lanes-container.scrubbing {
+            cursor: ew-resize;
         }
 
         /* Transport controls */
@@ -697,6 +707,7 @@
         let playbackStartTimestamp = null;
         let animationFrameId = null;
         let ccBarValues = new Array(128).fill(0); // Current value for each CC (0-127)
+        let isDraggingPlayhead = false;
 
         // DOM elements
         const uploadArea = document.getElementById('uploadArea');
@@ -766,6 +777,73 @@
         fitToViewBtn.addEventListener('click', fitToView);
         playPauseBtn.addEventListener('click', togglePlayPause);
         stopBtn.addEventListener('click', stopPlayback);
+
+        // Playhead drag functionality
+        function handlePlayheadDrag(e) {
+            if (!isDraggingPlayhead || totalDuration <= 0) return;
+
+            const rect = lanesContainer.getBoundingClientRect();
+            const x = e.clientX - rect.left + graphScroll.scrollLeft;
+            const newTime = Math.max(0, Math.min(totalDuration, x / pixelsPerSecond));
+
+            playbackTime = newTime;
+            updateTimecodeDisplay(newTime);
+            updatePlayhead(newTime);
+            updateCCBars(newTime);
+
+            // Update playback start timestamp if playing
+            if (isPlaying) {
+                playbackStartTimestamp = performance.now() - (playbackTime * 1000);
+            }
+        }
+
+        function startPlayheadDrag(e) {
+            if (totalDuration <= 0) return;
+            isDraggingPlayhead = true;
+            const playhead = document.getElementById('playhead');
+            playhead.classList.add('dragging');
+            lanesContainer.classList.add('scrubbing');
+            document.addEventListener('mousemove', handlePlayheadDrag);
+            document.addEventListener('mouseup', stopPlayheadDrag);
+            e.preventDefault();
+        }
+
+        function stopPlayheadDrag() {
+            isDraggingPlayhead = false;
+            const playhead = document.getElementById('playhead');
+            if (playhead) {
+                playhead.classList.remove('dragging');
+            }
+            lanesContainer.classList.remove('scrubbing');
+            document.removeEventListener('mousemove', handlePlayheadDrag);
+            document.removeEventListener('mouseup', stopPlayheadDrag);
+        }
+
+        // Add playhead drag listener (delegated since playhead is recreated)
+        lanesContainer.addEventListener('mousedown', (e) => {
+            if (e.target.classList.contains('playhead') || e.target.closest('.playhead')) {
+                startPlayheadDrag(e);
+            }
+        });
+
+        // Also allow clicking on the lanes area to set playhead position
+        lanesContainer.addEventListener('click', (e) => {
+            if (isDraggingPlayhead || totalDuration <= 0) return;
+            if (e.target.classList.contains('playhead') || e.target.closest('.playhead')) return;
+
+            const rect = lanesContainer.getBoundingClientRect();
+            const x = e.clientX - rect.left + graphScroll.scrollLeft;
+            const newTime = Math.max(0, Math.min(totalDuration, x / pixelsPerSecond));
+
+            playbackTime = newTime;
+            updateTimecodeDisplay(newTime);
+            updatePlayhead(newTime);
+            updateCCBars(newTime);
+
+            if (isPlaying) {
+                playbackStartTimestamp = performance.now() - (playbackTime * 1000);
+            }
+        });
 
         function togglePlayPause() {
             if (totalDuration <= 0) return;
@@ -848,11 +926,13 @@
                 const xPos = time * pixelsPerSecond;
                 playhead.style.left = xPos + 'px';
 
-                // Auto-scroll to keep playhead visible
-                const scrollLeft = graphScroll.scrollLeft;
-                const viewWidth = graphScroll.clientWidth - 150; // minus lane labels
-                if (xPos > scrollLeft + viewWidth - 50 || xPos < scrollLeft) {
-                    graphScroll.scrollLeft = Math.max(0, xPos - 100);
+                // Auto-scroll to keep playhead visible (but not while dragging)
+                if (!isDraggingPlayhead) {
+                    const scrollLeft = graphScroll.scrollLeft;
+                    const viewWidth = graphScroll.clientWidth - 150; // minus lane labels
+                    if (xPos > scrollLeft + viewWidth - 50 || xPos < scrollLeft) {
+                        graphScroll.scrollLeft = Math.max(0, xPos - 100);
+                    }
                 }
             }
         }
@@ -1135,7 +1215,7 @@
             if (messages.length === 0) {
                 laneLabels.innerHTML = '';
                 timeRuler.innerHTML = '';
-                lanesContainer.innerHTML = '<div class="playhead" id="playhead"></div>';
+                lanesContainer.innerHTML = '<div class="playhead visible" id="playhead"></div>';
                 emptyState.style.display = 'block';
                 return;
             }
@@ -1190,7 +1270,7 @@
             });
 
             // Render lanes
-            lanesContainer.innerHTML = '<div class="playhead" id="playhead"></div>';
+            lanesContainer.innerHTML = '<div class="playhead visible" id="playhead"></div>';
 
             laneList.forEach((lane, index) => {
                 const laneEl = document.createElement('div');
